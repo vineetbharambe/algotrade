@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Algorithmic Trading Strategy – MA Crossover</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card: #1e293b;
+      --border: #334155;
+      --text: #e2e8f0;
+      --muted: #94a3b8;
+      --accent: #3b82f6;
+      --green: #22c55e;
+      --red: #ef4444;
+      --yellow: #eab308;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+      min-height: 100vh;
+      padding: 24px;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 32px;
+    }
+
+    header h1 {
+      font-size: 1.9rem;
+      font-weight: 700;
+      background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 8px;
+    }
+
+    header p {
+      color: var(--muted);
+      font-size: 1rem;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 320px 1fr;
+      gap: 24px;
+    }
+
+    @media (max-width: 900px) {
+      .grid { grid-template-columns: 1fr; }
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+    }
+
+    .card h2 {
+      font-size: 1.1rem;
+      margin-bottom: 16px;
+      color: #f1f5f9;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .form-group {
+      margin-bottom: 16px;
+    }
+
+    label {
+      display: block;
+      font-size: 0.85rem;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+
+    input[type="number"], select {
+      width: 100%;
+      padding: 10px 12px;
+      background: #0f172a;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-size: 0.95rem;
+    }
+
+    input:focus, select:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+
+    .btn {
+      width: 100%;
+      padding: 12px;
+      background: var(--accent);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+      margin-top: 8px;
+    }
+
+    .btn:hover { background: #2563eb; }
+
+    .metrics {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-top: 20px;
+    }
+
+    .metric {
+      background: #0f172a;
+      border-radius: 8px;
+      padding: 12px;
+      text-align: center;
+    }
+
+    .metric .value {
+      font-size: 1.25rem;
+      font-weight: 700;
+    }
+
+    .metric .label {
+      font-size: 0.75rem;
+      color: var(--muted);
+      margin-top: 2px;
+    }
+
+    .positive { color: var(--green); }
+    .negative { color: var(--red); }
+
+    .chart-container {
+      position: relative;
+      height: 420px;
+    }
+
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      margin-top: 16px;
+      font-size: 0.85rem;
+      color: var(--muted);
+    }
+
+    .legend span {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+    }
+
+    .strategy-info {
+      margin-top: 24px;
+      font-size: 0.9rem;
+      color: var(--muted);
+    }
+
+    .strategy-info h3 {
+      color: #f1f5f9;
+      margin-bottom: 8px;
+      font-size: 1rem;
+    }
+
+    .strategy-info ul {
+      padding-left: 20px;
+    }
+
+    .strategy-info li { margin-bottom: 4px; }
+
+    .code-block {
+      background: #0f172a;
+      border-radius: 8px;
+      padding: 12px;
+      font-family: 'Cascadia Code', 'Fira Code', monospace;
+      font-size: 0.8rem;
+      overflow-x: auto;
+      margin-top: 12px;
+      border: 1px solid var(--border);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Algorithmic Trading Strategy</h1>
+      <p>Simple Moving Average (SMA) Crossover Strategy with Live Backtest</p>
+    </header>
+
+    <div class="grid">
+      <!-- Controls -->
+      <div class="card">
+        <h2>⚙️ Parameters</h2>
+
+        <div class="form-group">
+          <label for="shortMA">Short MA Period</label>
+          <input type="number" id="shortMA" value="10" min="2" max="50">
+        </div>
+
+        <div class="form-group">
+          <label for="longMA">Long MA Period</label>
+          <input type="number" id="longMA" value="30" min="5" max="100">
+        </div>
+
+        <div class="form-group">
+          <label for="dataPoints">Number of Candles</label>
+          <input type="number" id="dataPoints" value="200" min="50" max="500">
+        </div>
+
+        <div class="form-group">
+          <label for="volatility">Volatility</label>
+          <select id="volatility">
+            <option value="0.8">Low</option>
+            <option value="1.5" selected>Medium</option>
+            <option value="2.5">High</option>
+          </select>
+        </div>
+
+        <button class="btn" onclick="runStrategy()">▶ Run Strategy</button>
+
+        <div class="metrics" id="metrics">
+          <div class="metric">
+            <div class="value" id="totalReturn">—</div>
+            <div class="label">Total Return</div>
+          </div>
+          <div class="metric">
+            <div class="value" id="numTrades">—</div>
+            <div class="label">Trades</div>
+          </div>
+          <div class="metric">
+            <div class="value" id="winRate">—</div>
+            <div class="label">Win Rate</div>
+          </div>
+          <div class="metric">
+            <div class="value" id="maxDrawdown">—</div>
+            <div class="label">Max Drawdown</div>
+          </div>
+        </div>
+
+        <div class="strategy-info">
+          <h3>Strategy Logic</h3>
+          <ul>
+            <li><strong>Buy</strong> when Short MA crosses <em>above</em> Long MA</li>
+            <li><strong>Sell</strong> when Short MA crosses <em>below</em> Long MA</li>
+            <li>Always in the market (long or cash)</li>
+          </ul>
+
+          <div class="code-block">
+// Pseudocode
+if (shortMA > longMA && previousShort <= previousLong)
+  → BUY (enter long)
+if (shortMA < longMA && previousShort >= previousLong)
+  → SELL (exit long)
+          </div>
+        </div>
+      </div>
+
+      <!-- Chart -->
+      <div class="card">
+        <h2>📈 Price & Signals</h2>
+        <div class="chart-container">
+          <canvas id="priceChart"></canvas>
+        </div>
+        <div class="legend">
+          <span><div class="dot" style="background:#3b82f6"></div> Price</span>
+          <span><div class="dot" style="background:#22c55e"></div> Short MA</span>
+          <span><div class="dot" style="background:#f59e0b"></div> Long MA</span>
+          <span><div class="dot" style="background:#22c55e"></div> Buy Signal</span>
+          <span><div class="dot" style="background:#ef4444"></div> Sell Signal</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let chart = null;
+
+    // Generate synthetic OHLCV-like price data (close prices)
+    function generatePrices(n, volatility) {
+      const prices = [100];
+      for (let i = 1; i < n; i++) {
+        const change = (Math.random() - 0.48) * volatility;
+        const next = Math.max(10, prices[i - 1] * (1 + change / 100));
+        prices.push(+next.toFixed(2));
+      }
+      return prices;
+    }
+
+    // Simple Moving Average
+    function sma(data, period) {
+      const result = new Array(data.length).fill(null);
+      for (let i = period - 1; i < data.length; i++) {
+        let sum = 0;
+        for (let j = 0; j < period; j++) sum += data[i - j];
+        result[i] = +(sum / period).toFixed(2);
+      }
+      return result;
+    }
+
+    // Detect crossover signals
+    function generateSignals(shortMA, longMA) {
+      const signals = []; // {index, type: 'buy'|'sell'}
+      for (let i = 1; i < shortMA.length; i++) {
+        if (shortMA[i] === null || longMA[i] === null) continue;
+
+        const prevShort = shortMA[i - 1];
+        const prevLong = longMA[i - 1];
+        if (prevShort === null || prevLong === null) continue;
+
+        // Golden cross → Buy
+        if (prevShort <= prevLong && shortMA[i] > longMA[i]) {
+          signals.push({ index: i, type: 'buy' });
+        }
+        // Death cross → Sell
+        if (prevShort >= prevLong && shortMA[i] < longMA[i]) {
+          signals.push({ index: i, type: 'sell' });
+        }
+      }
+      return signals;
+    }
+
+    // Simple backtest
+    function backtest(prices, signals) {
+      let capital = 10000;
+      let position = 0; // shares
+      let entryPrice = 0;
+      let trades = [];
+      let equity = [capital];
+      let peak = capital;
+      let maxDD = 0;
+
+      let signalIdx = 0;
+
+      for (let i = 0; i < prices.length; i++) {
+        // Process signal at this bar
+        if (signalIdx < signals.length && signals[signalIdx].index === i) {
+          const sig = signals[signalIdx];
+          if (sig.type === 'buy' && position === 0) {
+            position = capital / prices[i];
+            entryPrice = prices[i];
+            capital = 0;
+          } else if (sig.type === 'sell' && position > 0) {
+            capital = position * prices[i];
+            const pnl = ((prices[i] - entryPrice) / entryPrice) * 100;
+            trades.push(pnl);
+            position = 0;
+          }
+          signalIdx++;
+        }
+
+        // Mark-to-market
+        const currentEquity = capital + (position * prices[i]);
+        equity.push(currentEquity);
+        if (currentEquity > peak) peak = currentEquity;
+        const dd = ((peak - currentEquity) / peak) * 100;
+        if (dd > maxDD) maxDD = dd;
+      }
+
+      // Close any open position at the end
+      if (position > 0) {
+        capital = position * prices[prices.length - 1];
+        const pnl = ((prices[prices.length - 1] - entryPrice) / entryPrice) * 100;
+        trades.push(pnl);
+      }
+
+      const finalEquity = capital;
+      const totalReturn = ((finalEquity - 10000) / 10000) * 100;
+      const wins = trades.filter(t => t > 0).length;
+      const winRate = trades.length ? (wins / trades.length) * 100 : 0;
+
+      return {
+        totalReturn: totalReturn.toFixed(2),
+        numTrades: trades.length,
+        winRate: winRate.toFixed(1),
+        maxDrawdown: maxDD.toFixed(2)
+      };
+    }
+
+    function runStrategy() {
+      const shortPeriod = parseInt(document.getElementById('shortMA').value) || 10;
+      const longPeriod = parseInt(document.getElementById('longMA').value) || 30;
+      const n = parseInt(document.getElementById('dataPoints').value) || 200;
+      const vol = parseFloat(document.getElementById('volatility').value) || 1.5;
+
+      if (shortPeriod >= longPeriod) {
+        alert('Short MA period must be smaller than Long MA period');
+        return;
+      }
+
+      const prices = generatePrices(n, vol);
+      const shortMA = sma(prices, shortPeriod);
+      const longMA = sma(prices, longPeriod);
+      const signals = generateSignals(shortMA, longMA);
+      const metrics = backtest(prices, signals);
+
+      // Update metrics UI
+      document.getElementById('totalReturn').textContent = metrics.totalReturn + '%';
+      document.getElementById('totalReturn').className = 'value ' + (metrics.totalReturn >= 0 ? 'positive' : 'negative');
+      document.getElementById('numTrades').textContent = metrics.numTrades;
+      document.getElementById('winRate').textContent = metrics.winRate + '%';
+      document.getElementById('maxDrawdown').textContent = metrics.maxDrawdown + '%';
+      document.getElementById('maxDrawdown').className = 'value negative';
+
+      // Prepare chart data
+      const labels = prices.map((_, i) => i + 1);
+
+      const buyPoints = signals.filter(s => s.type === 'buy').map(s => ({
+        x: s.index + 1,
+        y: prices[s.index]
+      }));
+      const sellPoints = signals.filter(s => s.type === 'sell').map(s => ({
+        x: s.index + 1,
+        y: prices[s.index]
+      }));
+
+      if (chart) chart.destroy();
+
+      const ctx = document.getElementById('priceChart').getContext('2d');
+      chart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [
+            {
+              label: 'Price',
+              data: prices,
+              borderColor: '#3b82f6',
+              backgroundColor: 'transparent',
+              borderWidth: 2,
+              pointRadius: 0,
+              tension: 0.1
+            },
+            {
+              label: `SMA ${shortPeriod}`,
+              data: shortMA,
+              borderColor: '#22c55e',
+              borderWidth: 1.5,
+              pointRadius: 0,
+              borderDash: [4, 2]
+            },
+            {
+              label: `SMA ${longPeriod}`,
+              data: longMA,
+              borderColor: '#f59e0b',
+              borderWidth: 1.5,
+              pointRadius: 0,
+              borderDash: [4, 2]
+            },
+            {
+              label: 'Buy',
+              data: buyPoints,
+              type: 'scatter',
+              backgroundColor: '#22c55e',
+              borderColor: '#16a34a',
+              pointRadius: 7,
+              pointStyle: 'triangle',
+              showLine: false
+            },
+            {
+              label: 'Sell',
+              data: sellPoints,
+              type: 'scatter',
+              backgroundColor: '#ef4444',
+              borderColor: '#dc2626',
+              pointRadius: 7,
+              pointStyle: 'triangle',
+              rotation: 180,
+              showLine: false
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: {
+            mode: 'index',
+            intersect: false
+          },
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              backgroundColor: '#1e293b',
+              titleColor: '#e2e8f0',
+              bodyColor: '#94a3b8',
+              borderColor: '#334155',
+              borderWidth: 1
+            }
+          },
+          scales: {
+            x: {
+              grid: { color: '#1e293b' },
+              ticks: { color: '#64748b', maxTicksLimit: 12 }
+            },
+            y: {
+              grid: { color: '#1e293b' },
+              ticks: { color: '#64748b' }
+            }
+          }
+        }
+      });
+    }
+
+    // Run on load
+    runStrategy();
+  </script>
+</body>
+</html>
